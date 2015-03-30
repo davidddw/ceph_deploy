@@ -1,0 +1,12 @@
+centos151:
+  host: 172.16.39.151
+  user: root
+  passwd: yunshan3302
+centos152:
+  host: 172.16.39.152
+  user: root
+  passwd: yunshan3302
+centos153:
+  host: 172.16.39.153
+  user: root
+  passwd: yunshan3302

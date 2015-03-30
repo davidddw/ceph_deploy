@@ -1,0 +1,5 @@
+base:
+  '*':
+    - environment
+    - mine
+    - ceph
