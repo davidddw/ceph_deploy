@@ -20,19 +20,21 @@ ntp_conf_setup:
     - require_in:
       - service: ntp_service
 
-ntp_service: 
-  service.running: 
-    - name: ntpd
-    - enable: True
-    - watch: 
-      - file: ntp_conf_setup
-      
 ntp_update: 
   cmd.run: 
     - name: ntpdate -d {{ ntpservers[0] }}
     - timeout: 10
     - require:
       - file: ntp_conf_setup 
+
+ntp_service: 
+  service.running: 
+    - name: ntpd
+    - enable: True
+    - watch: 
+      - file: ntp_conf_setup
+    - require:
+      - cmd: ntp_update 
 
 systohc: 
   cmd.run: 
