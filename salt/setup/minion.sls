@@ -7,7 +7,7 @@ salt_pkg:
     - name: salt-minion
     - fromrepo: ceph
     - require: 
-      - pkgrepo: ceph_repo
+      - pkgrepo: pkg_repo
 
 /etc/salt/minion.d:
   file.directory:

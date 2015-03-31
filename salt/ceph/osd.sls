@@ -28,6 +28,10 @@ ceph_conf_update_{{ osd_id }}:
 {% endif -%}
 {% endfor -%}
 
+setup_autostart:
+  cmd.run: 
+    - name: echo "/etc/init.d/ceph start" >> /etc/rc.local
+
 start ceph-osd-all:
   cmd.run: 
     - name: /etc/init.d/ceph start osd

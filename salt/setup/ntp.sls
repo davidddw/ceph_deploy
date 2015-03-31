@@ -8,7 +8,7 @@ ntp_pkg:
     - name: ntp
     - fromrepo: ceph
     - require:
-      - pkgrepo: ceph_repo
+      - pkgrepo: pkg_repo
 
 ntp_conf_setup:
   file.managed:
@@ -33,6 +33,13 @@ ntp_update:
     - timeout: 10
     - require:
       - file: ntp_conf_setup 
+
+systohc: 
+  cmd.run: 
+    - name: hwclock --systohc
+    - timeout: 10
+    - require:
+      - file: ntp_update 
     
 Asia/Shanghai:
   timezone.system:

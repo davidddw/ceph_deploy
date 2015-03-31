@@ -21,6 +21,7 @@ partition_table:
             {% for parti in partition -%}
             mkpart primary xfs {{ parti['from'] }} {{ parti['to'] }} \
             {% endfor -%}
+    - unless: parted -s /dev/{{ journal }} print | grep primary
 
 {% endif -%}
 {% endfor -%}
