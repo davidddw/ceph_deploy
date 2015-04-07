@@ -6,6 +6,7 @@ import json
 import yaml
 import salt.client
 import client
+import ConfigParser
 
 
 def get_json_from_cfg(json_file):
@@ -26,22 +27,31 @@ def write_pillar(default='ceph.sls'):
     write_yaml_from_cfg(get_json_from_cfg('ceph.json'), dest_file)
 
 
-def generate_roster(filename='/etc/salt/roster'):
-    with open(yaml_file, "w+") as yaml_f:
-        yaml.safe_dump(data, yaml_f, allow_unicode=True)
+def generate_roster(hostlist, filename='/etc/salt/roster'):
+    config = ConfigParser.RawConfigParser()
+
+    for host in hostlist:
+        config.add_section(host['name'])
+        config.set(host['name'], 'host', host['ip'])
+        config.set(host['name'], 'user', host['user'])
+        config.set(host['name'], 'passwd', host['passwd'])
+
+    with open(filename, 'wb') as configfile:
+        config.write(configfile)
+
 
 def salt_caller():
     client = salt.client.LocalClient()
+    ret = client.cmd('*', 'ceph.mon', [])
+    print ret
     ret = client.cmd('*', 'ceph.osd', [])
     print ret
-
-
-def salt_ssh_caller():
-    ssh_client = client.SSHClient()
-    ssh_client.cmd("*", "test.ping")
-    #ssh_client.cmd('*', 'state.sls', ['some.state'], ssh_timeout, ssh_user=ssh_user, ssh_passwd=ssh_passwd)
+    ret = client.cmd('*', 'ceph.pool', [])
+    print ret
+    ret = client.cmd('*', 'kvm.pool', [])
+    print ret
 
 
 if __name__ == '__main__':
     write_pillar()
-    #salt_caller()
+    salt_caller()
