@@ -1,6 +1,6 @@
 {% set repoip = salt['pillar.get']('nodes:master:ip') -%}
 
-ceph_repo:
+pkg_repo:
   pkgrepo.managed:
     - humanname: ceph
     - name: ceph

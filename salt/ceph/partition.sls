@@ -1,4 +1,4 @@
-{% import 'ceph/global_vars.jinja' as conf with context -%}
+{% set host = salt['config.get']('host') -%}
 
 include:
   - .repo
@@ -8,20 +8,27 @@ parted:
     - name: parted
     - fromrepo: ceph
     - require:
-      - pkgrepo: ceph_repo
+      - pkgrepo: pkg_repo
 
-{% for journal in salt['pillar.get']('nodes:' + conf.host + ':journal') -%}
+{% for journal in salt['pillar.get']('nodes:' + host + ':journal') -%}
 {% if journal -%}
-{% set partition = salt['pillar.get']('nodes:' + conf.host + ':journal:' + journal + ':partition') -%}
+{% set partition = salt['pillar.get']('nodes:' + host + ':journal:' + journal + ':partition') -%}
 
-partition_table:
+parted_mklabel:
+  cmd.run:
+    - name: parted -s /dev/{{ journal }} mklabel gpt
+
+parted_mktable:
   cmd.run:
     - name: |
         parted -s /dev/{{ journal }} \
             {% for parti in partition -%}
             mkpart primary xfs {{ parti['from'] }} {{ parti['to'] }} \
-            {% endfor -%}
+            {% endfor %}
+
     - unless: parted -s /dev/{{ journal }} print | grep primary
+    - require:
+      - cmd: parted_mklabel 
 
 {% endif -%}
 {% endfor -%}

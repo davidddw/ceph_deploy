@@ -1,6 +1,7 @@
 base:
   '*':
-    - setup.hostsfile
-    - setup.ntp
+    - ceph.hostsfile
+    - ceph.ntp
     - ceph.ceph
+    - ceph.kvm
     - ceph.partition

@@ -13,7 +13,7 @@ ntp_pkg:
 ntp_conf_setup:
   file.managed:
     - name: /etc/ntp.conf
-    - source: salt://setup/files/ntpc.conf
+    - source: salt://ceph/files/ntpc.conf
     - template: jinja
     - require: 
       - pkg: ntp_pkg
@@ -41,7 +41,7 @@ systohc:
     - name: hwclock --systohc
     - timeout: 10
     - require:
-      - file: ntp_update 
+      - cmd: ntp_update 
     
 Asia/Shanghai:
   timezone.system:

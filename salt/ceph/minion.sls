@@ -23,7 +23,7 @@ salt_pkg:
 salt_conf:
   file.managed:
     - name: /etc/salt/minion.d/master.conf
-    - source: salt://setup/files/master.conf
+    - source: salt://ceph/files/master.conf
     - template: jinja
     - require: 
       - pkg: salt_pkg
@@ -43,7 +43,7 @@ grains_conf:
   file.managed:
     - name: /etc/salt/grains
     - template: jinja
-    - source: salt://setup/files/grains
+    - source: salt://ceph/files/grains
     - require:
       - pkg: salt_pkg
     - require_in:
