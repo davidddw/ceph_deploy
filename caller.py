@@ -5,7 +5,6 @@ import os
 import json
 import yaml
 import salt.client
-import client
 import ConfigParser
 
 
@@ -42,6 +41,8 @@ def generate_roster(hostlist, filename='/etc/salt/roster'):
 
 def salt_caller():
     client = salt.client.LocalClient()
+    ret = client.cmd('*', 'ceph.journal', [])
+    print ret
     ret = client.cmd('*', 'ceph.mon', [])
     print ret
     ret = client.cmd('*', 'ceph.osd', [])
@@ -54,4 +55,4 @@ def salt_caller():
 
 if __name__ == '__main__':
     write_pillar()
-    salt_caller()
+    # salt_caller()

@@ -41,16 +41,10 @@
       		],
       		"journal": {
       			"xvdb": {
-      				"partition": [
-      					{
-      						"from": "0%",
-      						"to": "4G"
-      					},
-      					{
-      						"from": "4G",
-      						"to": "8G"
-      					}
-      				]
+      				"partition": {
+      					"per_size": "4G",
+      					"count": 2
+      				}
       			}
       		},
       		"devs": {
@@ -69,16 +63,10 @@
       		],
       		"journal": {
       			"xvdb": {
-      				"partition": [
-      					{
-      						"from": "0%",
-      						"to": "4G"
-      					},
-      					{
-      						"from": "4G",
-      						"to": "8G"
-      					}
-      				]
+      				"partition": {
+      					"per_size": "4G",
+      					"count": 2
+      				}
       			}
       		},
       		"devs": {

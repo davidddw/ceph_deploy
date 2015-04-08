@@ -1,7 +1,16 @@
 #!/bin/bash
 
-mkdir -p /etc/salt/master.d/
-cat << EOF >> /etc/salt/master.d/livecloud.conf
+set -x
+
+prepair()
+{
+	rm -fr  /var/cache/salt/master/* 
+	systemctl restart salt-master
+	salt-key -D -y
+
+	
+	mkdir -p /etc/salt/master.d/
+	cat << EOF > /etc/salt/master.d/livecloud.conf
 auto_accept: False
 
 file_roots:
@@ -17,7 +26,7 @@ reactor:
     - /opt/calamari/salt/reactor/start.sls
 EOF
 
-cat <<EOF > /etc/salt/roster 
+	cat <<EOF > /etc/salt/roster 
 centos151:
   host: 172.16.39.151
   user: root
@@ -31,7 +40,8 @@ centos153:
   user: root
   passwd: yunshan3302
 EOF
-cat << EOF >> /root/.ssh/config
+
+	cat << EOF >> /root/.ssh/config
 host 172.16.39.151
     StrictHostKeyChecking no
 host 172.16.39.152
@@ -39,14 +49,18 @@ host 172.16.39.152
 host 172.16.39.151
     StrictHostKeyChecking no
 EOF
+}
 
-salt-ssh 'centos8[1-3]' -r 'echo "172.16.39.11 centos39_11" >> /etc/hosts'
-salt-ssh 'centos8[1-3]' state.sls ceph.minion
-salt-key -a centos8[1-3] -y
-salt 'centos8[1-3]' state.highstate -l all -v 
-
-salt '*' test.ping
-salt 'centos8[1-3]' state.highstate -l all -v 
-salt 'centos8[1-3]' saltutil.sync_states
-
+prepair
+salt-ssh 'centos15[1-3]' -r 'echo "172.16.39.11 centos39_11" >> /etc/hosts'
+salt-ssh 'centos15[1-3]' state.sls ceph.minion
+sleep 10
+salt-key -a centos15[1-3] -y
+sleep 10
+salt 'centos15[1-3]' state.highstate -l all -v 
+#salt 'centos15[1-3]' ceph.journal
+#salt 'centos15[1-3]' ceph.mon
+#salt 'centos15[1-3]' ceph.osd
+#salt 'centos15[1-3]' ceph.pool
+#salt 'centos15[1-3]' kvm.pool
 

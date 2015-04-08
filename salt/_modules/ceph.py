@@ -412,54 +412,107 @@ def _osd_crush_map(osd_id, host=None):
     command_check_output(fmt_line.format(osd_id=osd_id, host=host))
 
 
-def _partiton_exist(dev, value):
+def _partiton_exist(**kwargs):
+    '''
+    @params: dev, value
+    '''
     fmt_line = 'sgdisk --print /dev/{dev} | grep {value}'
-    return cgrep(fmt_line.format(dev=dev, value=value))
+    return cgrep(fmt_line.format(**kwargs))
 
 
-def _parted_dev(dev, osd_uuid):
+def _parted_dev(**kwargs):
+    '''
+    @params: dev, osd_uuid
+    '''
     ptype_tobe = '89c57f98-2fe5-4dc0-89c1-f3ad0ceff2be'
+    kwargs.update({'ptype_tobe': ptype_tobe})
+
     fmt_line = 'sgdisk --largest-new=1 --change-name="1:ceph data" \
             --partition-guid=1:{osd_uuid} \
             --typecode=1:{ptype_tobe} -- /dev/{dev}'
-    return command_check_output(
-        fmt_line.format(dev=dev,
-                        osd_uuid=osd_uuid,
-                        ptype_tobe=ptype_tobe)
-    )
+    return command_check_output(fmt_line.format(**kwargs))
 
 
-def _mkfs_dev(dev):
+def _parted_journal(**kwargs):
+    '''
+    @params: journal_dev, count, per_size
+    '''
+    unit = kwargs['per_size'][-1]
+    size = int(kwargs['per_size'][:-1])
+    final_string = 'sgdisk '
+
+    fmt_line = '-n {partnum}:0:+{size}{unit} -c "{partnum}:ceph journal" '
+    for i in range(kwargs['count']):
+        final_string += fmt_line.format(partnum=i+1, unit=unit, size=size)
+    final_string += '-p /dev/{journal}'.format(journal=kwargs['journal_dev'])
+    return command_check_output(final_string)
+
+
+def journal():
+    ret = {'data': {}}
+    data = []
+    journals = __salt__['pillar.get']('nodes:' + _get_host() + ':journal')
+    for journal in journals:
+        part_regex = 'nodes:{host}:journal:{journal}:partition'
+        part_size = __salt__['pillar.get'](
+            part_regex.format(host=_get_host(),
+                              journal=journal)
+        )
+        if not _partiton_exist(dev=journal, value='journal'):
+            data.append({'parted': _parted_journal(
+                journal_dev=journal, count=part_size['count'],
+                per_size=part_size['per_size'])
+            })
+    ret['data'] = data
+    ret['comment'] = 'Create journal partition'
+    ret['result'] = True
+    return ret
+
+
+def _mkfs_dev(**kwargs):
+    '''
+    @params: dev
+    '''
     fmt_line = 'mkfs -t xfs -f /dev/{dev}1'
-    return command_check_output(fmt_line.format(dev=dev))
+    return command_check_output(fmt_line.format(**kwargs))
 
 
-def _mount_dev(osd_dev, osd_mount_point):
-    if not __salt__['mount.is_mounted'](osd_dev):
-        __salt__['mount.mount'](osd_mount_point, osd_dev, mkmnt=True,
-                                fstype='xfs')
-    return __salt__['mount.set_fstab'](osd_mount_point, osd_dev, 'xfs')
+def _mount_dev(**kwargs):
+    '''
+    @params: osd_mount_point, osd_dev
+    '''
+    if not __salt__['mount.is_mounted'](kwargs['osd_dev']):
+        __salt__['mount.mount'](kwargs['osd_mount_point'], kwargs['osd_dev'],
+                                mkmnt=True, fstype='xfs')
+    return __salt__['mount.set_fstab'](kwargs['osd_mount_point'],
+                                       kwargs['osd_dev'], 'xfs')
 
 
-def _replace_journal(osd_node, osd_id, journal_dev, journal_path):
-    if __salt__['file.file_exists'](journal_path):
+def _replace_journal(**kwargs):
+    '''
+    @params: osd_node, osd_id, journal_dev, journal_path
+    '''
+    if __salt__['file.file_exists'](kwargs['journal_path']):
         # flush_journal
         fmt_line = 'ceph-osd -i {osd_id} --flush-journal'
-        command_check_output(fmt_line.format(osd_id=osd_id))
+        command_check_output(fmt_line.format(osd_id=kwargs['osd_id']))
         # rm_journal
-        __salt__['file.remove'](journal_path)
+        __salt__['file.remove'](kwargs['journal_path'])
 
         # link_journal
         __salt__['file.symlink'](
-            '/dev/{journal}'.format(journal=journal_dev),
-            journal_path
+            '/dev/{journal}'.format(journal=kwargs['journal_dev']),
+            kwargs['journal_path']
         )
         # recreate_journal
         fmt_line = 'ceph-osd -i {osd_id} --mkjournal'
-        command_check_output(fmt_line.format(osd_id=osd_id))
+        command_check_output(fmt_line.format(osd_id=kwargs['osd_id']))
 
 
 def _ceph_osd_create(osd_id, osd_node, osd_uuid, osd_path=OSD_PATH):
+    '''
+    @params: osd_node, osd_id, journal_dev, journal_path
+    '''
     fmt_line = 'ceph-osd -i {osd_id} --osd-data={osd} --mkfs --osd-uuid {uuid}'
     return command_check_output(
         fmt_line.format(osd_id=osd_id,
@@ -497,13 +550,14 @@ def create_osd(dev, journal_dev, ex_journal=True):
     data = []
     # prepare_disk
     osd_uuid = uuid.uuid4()
-    if not _partiton_exist(dev, 'ceph'):
-        data.append({'parted': _parted_dev(dev, osd_uuid)})
+
+    if not _partiton_exist(dev=dev, value='ceph'):
+        data.append({'parted': _parted_dev(dev=dev, osd_uuid=osd_uuid)})
 
     # format_disk
     fmt_line = 'parted -s /dev/{dev} print | grep xfs'
     if not cgrep(fmt_line.format(dev=dev)):
-        data.append({'parted': _mkfs_dev(dev)})
+        data.append({'parted': _mkfs_dev(dev=dev)})
 
     # mount_osd
     fmt_line = 'ceph osd create {uuid}'
@@ -514,9 +568,10 @@ def create_osd(dev, journal_dev, ex_journal=True):
     fmt_line = 'ls {osd_path} | grep {pattern}'
     if not cgrep(fmt_line.format(osd_path=OSD_PATH, pattern=pattern)):
         osd_mount_point = os.path.join(OSD_PATH, pattern)
-        data.append({'mounted': _mount_dev('/dev/{dev}1'.format(dev=dev),
-                                           osd_mount_point)
-                     })
+        data.append({'mounted': _mount_dev(
+            osd_dev='/dev/{dev}1'.format(dev=dev),
+            osd_mount_point=osd_mount_point)
+        })
 
     # create_osd
     osd_node = os.path.join(OSD_PATH, 'ceph-{osd_id}'.format(osd_id=osd_id))
@@ -526,7 +581,8 @@ def create_osd(dev, journal_dev, ex_journal=True):
     # change_journal
     journal_path = os.path.join(osd_node, 'journal')
     if ex_journal:
-        _replace_journal(osd_node, osd_id, journal_dev, journal_path)
+        _replace_journal(osd_node=osd_node, osd_id=osd_id,
+                         journal_dev=journal_dev, journal_path=journal_path)
     if __salt__['file.is_link'](journal_path):
         # ceph_osd_crush
         _osd_crush_map(osd_id, _get_host())

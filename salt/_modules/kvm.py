@@ -49,8 +49,8 @@ def _gen_vol_xml(**context):
     cephpool_template = '''<pool type='rbd'>
   <name>{{ name }}</name>
   <source>
-    {% for ip in host_ips -%}
-    <host name='{{ ip }}' port='6789'/>
+    {% for host_ip in host_ips -%}
+    <host name='{{ host_ip }}' port='6789'/>
     {% endfor -%}
     <name>{{ name }}</name>
   </source>
@@ -93,16 +93,27 @@ def __get_conn():
     return conn
 
 
+def _get_mon_hostslist():
+    MON_INT = __salt__['pillar.get']('ceph:mon:interface')
+    hosts = []
+    hostsitems = __salt__['mine.get']('roles:ceph-mon',
+                                      'grains.items',
+                                      'grain')
+
+    for _, grains in hostsitems.items():
+        hosts.append(grains['ip_interfaces'][MON_INT][0])
+
+    return hosts
+
+
 def create_storage_pool(name, host_ips):
     xml = _gen_vol_xml(name=name, host_ips=host_ips)
 
     conn = __get_conn()
     try:
-        oldpool = conn.storagePoolLookupByName(name)
-        if oldpool is not None:
-            p = conn.storagePoolDefineXML(xml, 0)
-            p.setAutostart(True)
-            p.create(0)
+        p = conn.storagePoolDefineXML(xml, 0)
+        p.setAutostart(True)
+        p.create(0)
     except libvirt.libvirtError, e:
         logger.error(e)
         raise StorageError(e.get_error_message())
@@ -110,14 +121,21 @@ def create_storage_pool(name, host_ips):
     return p is not None
 
 
-def define_vol():
+def pool():
     '''
     Define a volume based on the XML passed to the function
     CLI Example:
     .. code-block:: bash
         salt '*' virt.define_vol_xml_str <XML in string format>
     '''
-    pools = __salt__['pillar.get']('kvm:pools')
-    host_ips = __salt__['pillar.get']('kvm:mon')
+    ret = {'data': {}}
+    data = []
+    pools = __salt__['pillar.get']('ceph:pools')
+    host_ips = _get_mon_hostslist()
+
     for pool in pools:
-        create_storage_pool(pool['name'], host_ips)
+        data.append(create_storage_pool(pool['name'], host_ips))
+    ret['data'] = data
+    ret['comment'] = 'Create kvm pool'
+    ret['result'] = True
+    return ret
