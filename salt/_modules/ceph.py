@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import os
+import re
 import logging
 import shlex
 import subprocess
@@ -424,12 +425,15 @@ def _parted_dev(**kwargs):
     '''
     @params: dev, osd_uuid
     '''
+    import uuid
     ptype_tobe = '89c57f98-2fe5-4dc0-89c1-f3ad0ceff2be'
+    osd_uuid = uuid.uuid4()
     kwargs.update({'ptype_tobe': ptype_tobe})
 
     fmt_line = 'sgdisk --largest-new=1 --change-name="1:ceph data" \
             --partition-guid=1:{osd_uuid} \
             --typecode=1:{ptype_tobe} -- /dev/{dev}'
+    kwargs.update({'osd_uuid': osd_uuid})
     return command_check_output(fmt_line.format(**kwargs))
 
 
@@ -481,9 +485,8 @@ def _mount_dev(**kwargs):
     '''
     @params: osd_mount_point, osd_dev
     '''
-    if not __salt__['mount.is_mounted'](kwargs['osd_dev']):
-        __salt__['mount.mount'](kwargs['osd_mount_point'], kwargs['osd_dev'],
-                                mkmnt=True, fstype='xfs')
+    __salt__['mount.mount'](kwargs['osd_mount_point'], kwargs['osd_dev'],
+                            mkmnt=True, fstype='xfs')
     return __salt__['mount.set_fstab'](kwargs['osd_mount_point'],
                                        kwargs['osd_dev'], 'xfs')
 
@@ -509,15 +512,13 @@ def _replace_journal(**kwargs):
         command_check_output(fmt_line.format(osd_id=kwargs['osd_id']))
 
 
-def _ceph_osd_create(osd_id, osd_node, osd_uuid, osd_path=OSD_PATH):
+def _ceph_osd_create(osd_id, osd):
     '''
     @params: osd_node, osd_id, journal_dev, journal_path
     '''
-    fmt_line = 'ceph-osd -i {osd_id} --osd-data={osd} --mkfs --osd-uuid {uuid}'
+    fmt_line = 'ceph-osd -i {osd_id} --osd-data={osd} --mkfs'
     return command_check_output(
-        fmt_line.format(osd_id=osd_id,
-                        osd=os.path.join(osd_path, osd_node),
-                        uuid=osd_uuid))
+        fmt_line.format(osd_id=osd_id, osd=osd))
 
 
 def _update_ini(osd_id, curr_host):
@@ -539,51 +540,85 @@ def _ceph_autostart():
     return command('chkconfig ceph on')
 
 
+def _is_mount(dev):
+    fstablists = __salt__['mount.fstab']()
+    ret = False
+    for _, entry in fstablists.items():
+        if entry['device'] == dev:
+            ret = True
+            break
+    return ret
+
+
+def _get_id_from_dev(osd_dev):
+    fstablists = __salt__['mount.fstab']()
+    osd_mount_point = ''
+    for key, entry in fstablists.items():
+        if entry['device'] == osd_dev:
+            osd_mount_point = key
+            break
+
+    ret = re.findall(r'(\d+)', osd_mount_point)
+    return int(ret[0]) if ret else -1
+
+
 def create_osd(dev, journal_dev, ex_journal=True):
-    import uuid
     '''
     CLI Example:
     .. code-block:: bash
         salt '*' ceph.create_osd <dev> <journal_dev>
     '''
+    def __get_osd_mount_point(osd_id):
+        return os.path.join(OSD_PATH, 'ceph-{osd_id}'.format(osd_id=osd_id))
+
     ret = {'data': {}}
     data = []
     # prepare_disk
-    osd_uuid = uuid.uuid4()
 
     if not _partiton_exist(dev=dev, value='ceph'):
-        data.append({'parted': _parted_dev(dev=dev, osd_uuid=osd_uuid)})
+        data.append({'parted': _parted_dev(dev=dev)})
+    else:
+        data.append({'parted': 'exist'})
 
     # format_disk
     fmt_line = 'parted -s /dev/{dev} print | grep xfs'
     if not cgrep(fmt_line.format(dev=dev)):
         data.append({'parted': _mkfs_dev(dev=dev)})
+    else:
+        data.append({'parted': 'exist'})
 
     # mount_osd
-    fmt_line = 'ceph osd create {uuid}'
-    osd_id = command_check_output(fmt_line.format(uuid=osd_uuid)).strip()
-    data.append({'osd_id': osd_id})
-
-    pattern = 'ceph-{osd_id}'.format(osd_id=osd_id)
-    fmt_line = 'ls {osd_path} | grep {pattern}'
-    if not cgrep(fmt_line.format(osd_path=OSD_PATH, pattern=pattern)):
-        osd_mount_point = os.path.join(OSD_PATH, pattern)
+    osd_dev = '/dev/{dev}1'.format(dev=dev)
+    if not _is_mount('/dev/{dev}1'.format(dev=dev)):
+        fmt_line = 'ceph osd create'
+        osd_id = command_check_output(fmt_line).strip()
+        data.append({'osd_id': osd_id})
         data.append({'mounted': _mount_dev(
-            osd_dev='/dev/{dev}1'.format(dev=dev),
-            osd_mount_point=osd_mount_point)
+            osd_dev=osd_dev,
+            osd_mount_point=__get_osd_mount_point(osd_id))
         })
+    else:
+        osd_id = _get_id_from_dev(osd_dev)
+        data.append({'osd_id': osd_id})
+        data.append({'mounted': 'already'})
 
     # create_osd
-    osd_node = os.path.join(OSD_PATH, 'ceph-{osd_id}'.format(osd_id=osd_id))
-    if not __salt__['file.file_exists'](os.path.join(osd_node, 'ready')):
-        data.append({'create': _ceph_osd_create(osd_id, osd_node, osd_uuid)})
+    osd_mount_point = __get_osd_mount_point(osd_id)
+    ready_path = os.path.join(osd_mount_point, 'ready')
+    if not __salt__['file.file_exists'](ready_path):
+        data.append({'create': _ceph_osd_create(osd_id, osd_mount_point)})
+    else:
+        data.append({'create': 'already'})
 
     # change_journal
-    journal_path = os.path.join(osd_node, 'journal')
-    if ex_journal:
-        _replace_journal(osd_node=osd_node, osd_id=osd_id,
-                         journal_dev=journal_dev, journal_path=journal_path)
-    if __salt__['file.is_link'](journal_path):
+    journal_path = os.path.join(osd_mount_point, 'journal')
+    if ex_journal and not __salt__['file.is_link'](journal_path):
+        _replace_journal(osd_node=osd_mount_point,
+                         osd_id=osd_id,
+                         journal_dev=journal_dev,
+                         journal_path=journal_path)
+
+    if __salt__['file.file_exists'](journal_path):
         # ceph_osd_crush
         _osd_crush_map(osd_id, _get_host())
 

@@ -1,0 +1,70 @@
+---
+ceph:
+  global: 
+    cluster_network: 172.16.39.0/24
+    public_network: 172.16.39.0/24
+    fsid: 294bc494-81ba-4c3c-ac5d-af7b3442a2a5
+  mon: 
+    interface: eth0
+  pools: 
+  - name: capacity
+    pg_num: 128
+    pgp_num: 128
+  - name: performance
+    pg_num: 128
+    pgp_num: 128
+nodes: 
+  master: 
+    hostname: centos39_11
+    ip: 172.16.39.11
+  ntp: 
+    ntpservers: 
+    - 172.16.39.11
+    localnetworks: 
+    - 172.16.39.0
+  centos151: 
+    roles: 
+    - ceph-osd
+    - ceph-mon
+
+    journal: 
+      vdb:
+        partition: 
+          per_size: 8G
+          count: 2
+    devs: 
+      vdc: 
+        journal: vdb1
+      vdd: 
+        journal: vdb2        
+  centos152: 
+    roles: 
+    - ceph-osd
+    - ceph-mon
+
+    journal: 
+      vdb:
+        partition: 
+          per_size: 8G
+          count: 2
+    devs: 
+      vdc: 
+        journal: vdb1
+      vdd: 
+        journal: vdb2    
+  centos153: 
+    roles: 
+    - ceph-osd
+    - ceph-mon
+
+    journal: 
+      vdb:
+        partition: 
+          per_size: 8G
+          count: 2
+    devs: 
+      vdc: 
+        journal: vdb1
+      vdd: 
+        journal: vdb2     
+...

@@ -1,5 +1,3 @@
-{% set ntpservers = salt['pillar.get']('nodes:ntp:ntpservers') -%}
-
 include:
   - .repo
 
@@ -22,7 +20,7 @@ ntp_conf_setup:
 
 ntp_update: 
   cmd.run: 
-    - name: ntpdate -d {{ ntpservers[0] }}
+    - name: ntpdate -d {{ salt['pillar.get']('nodes:ntp:ntpservers')[0] }}
     - timeout: 10
     - require:
       - file: ntp_conf_setup 

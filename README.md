@@ -1,29 +1,21 @@
-rm -fr /var/cache/salt/master
-systemctl restart salt-master
+vim master.yml
+vim ceph.yml
 
-cat <<EOF > /etc/salt/roster 
-centos151:
-  host: 172.16.39.151
-  user: root
-  passwd: yunshan3302
-centos152:
-  host: 172.16.39.152
-  user: root
-  passwd: yunshan3302
-centos153:
-  host: 172.16.39.153
-  user: root
-  passwd: yunshan3302
-EOF
-
+python setup.py
 salt-ssh '*' -r 'echo "172.16.39.11 centos39_11" >> /etc/hosts'
+salt-ssh '*' state.sls ceph.minion
 
-salt-ssh '*' state.sls setup.minion -l all -v   
+salt-key -L
+salt-key -A -y
+salt '*' state.highstate
+salt '*' state.sls ceph.ntp
+salt '*' state.sls ceph.ceph
+salt '*' state.sls ceph.kvm
 
-salt '*' saltutil.sync_states
-
-salt '*' state.highstate -l all -v  
-
-salt '*' state.sls ceph.mon -l all -v
-
-salt '*' state.sls ceph.osd -l all -v
+python caller.py
+#salt '*' saltutil.sync_all
+#salt '*' ceph.journal
+#salt '*' ceph.mon
+#salt '*' ceph.osd
+#salt '*' ceph.pool
+#salt '*' kvm.pool
