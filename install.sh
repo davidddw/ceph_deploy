@@ -24,7 +24,7 @@ name=Yunshan temporary repository
 setuprepo
 echo "Installing Salt Tools ... "
 yum --disablerepo=\* --enablerepo=yunshan-temp install -y \
-salt-master salt-ssh monkey vim
+salt-master salt-ssh monkey vim ntp sshpass
 
 echo "Config monkey ... "
 sed -i "s#DocumentRoot .*#DocumentRoot $pathtorepo/repo#" /etc/monkey/sites/default

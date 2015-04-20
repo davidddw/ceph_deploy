@@ -2,7 +2,7 @@ include:
   - .repo
 
 kvm_pkg:
-  pkg.installed:
+  pkg.latest: 
     - name: kvm 
     - pkgs: [qemu, seabios-bin, dejavu-lgc-sans-fonts, seabios, ipxe-roms-qemu,
              vim-enhanced, lvm2]
@@ -13,7 +13,7 @@ kvm_pkg:
       - pkgrepo: pkg_repo
 
 libvirt_pkg:
-  pkg.installed:
+  pkg.latest: 
     - name: libvirt 
     - pkgs: [libvirt, libvirt-daemon-kvm, virt-install, virt-manager, virt-top,
              virt-who, virt-viewer, libvirt-python]

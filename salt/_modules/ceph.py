@@ -37,6 +37,7 @@ if system == "Windows":
 MON_PATH = '/var/lib/ceph/mon'
 OSD_PATH = '/var/lib/ceph/osd'
 CEPH_CONF = '/etc/ceph/ceph.conf'
+PYAGEXEC_CONF = '/usr/local/livecloud/pyagexec/pyagexec.cfg'
 CEPH_CLUSTER = 'ceph'
 CEPH_MONMAP = '/var/lib/ceph/tmp/{cluster}_monmap'.format(cluster=CEPH_CLUSTER)
 
@@ -421,6 +422,18 @@ def _partiton_exist(**kwargs):
     return cgrep(fmt_line.format(**kwargs))
 
 
+def _make_gpt_label(**kwargs):
+    '''
+    @params: dev
+    '''
+    fmt_line = 'parted -s /dev/{dev} print | grep gpt'
+    if not cgrep(fmt_line.format(**kwargs)):
+        fmt_line = 'parted -s /dev/{dev} mklabel gpt'
+        return command_check_output(fmt_line.format(**kwargs))
+    else:
+        return None
+
+
 def _parted_dev(**kwargs):
     '''
     @params: dev, osd_uuid
@@ -434,6 +447,7 @@ def _parted_dev(**kwargs):
             --partition-guid=1:{osd_uuid} \
             --typecode=1:{ptype_tobe} -- /dev/{dev}'
     kwargs.update({'osd_uuid': osd_uuid})
+    _make_gpt_label(**kwargs)
     return command_check_output(fmt_line.format(**kwargs))
 
 
@@ -633,6 +647,11 @@ def create_osd(dev, journal_dev, ex_journal=True):
 
 
 def osd():
+    '''
+    CLI Example:
+    .. code-block:: bash
+        salt '*' ceph.osd
+    '''
     ret = []
     devs = __salt__['pillar.get']('nodes:' + _get_host() + ':devs')
     for dev in devs:
@@ -644,6 +663,11 @@ def osd():
 
 
 def pool():
+    '''
+    CLI Example:
+    .. code-block:: bash
+        salt '*' ceph.pool
+    '''
     ret = {'data': {}}
     data = []
     fmt_line = 'ceph osd pool create {name} {pg_num} {pgp_num}'

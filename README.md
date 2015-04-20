@@ -8,6 +8,7 @@ salt-ssh '*' state.sls ceph.minion
 salt-key -L
 salt-key -A -y
 salt '*' state.highstate
+salt '*' state.sls ceph.minion
 salt '*' state.sls ceph.ntp
 salt '*' state.sls ceph.ceph
 salt '*' state.sls ceph.kvm
@@ -18,4 +19,7 @@ python caller.py
 #salt '*' ceph.mon
 #salt '*' ceph.osd
 #salt '*' ceph.pool
+
 #salt '*' kvm.pool
+
+#salt '*' state.sls ceph.pyagexec

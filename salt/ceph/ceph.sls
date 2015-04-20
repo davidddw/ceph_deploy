@@ -2,7 +2,7 @@ include:
   - .repo
 
 ceph_pkg:
-  pkg.installed:
+  pkg.latest: 
     - name: ceph
     - fromrepo: ceph
     - require: 
