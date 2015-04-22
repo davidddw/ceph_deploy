@@ -31,6 +31,16 @@ sed -i "s#DocumentRoot .*#DocumentRoot $pathtorepo/repo#" /etc/monkey/sites/defa
 sed -i '/dirlisting.so/s:# ::g' /etc/monkey/plugins.load
 systemctl restart monkey
 systemctl enable monkey
+systemctl enable ntpd
+systemctl enable salt-master
+
+echo \
+"
+restrict 172.16.0.0 mask 255.255.0.0 nomodify notrap
+server  127.127.1.0     # local clock
+fudge   127.127.1.0 stratum 10
+" >> /etc/ntp.conf
+
 
 echo Done
 cleanup

@@ -1,5 +1,5 @@
 ---
-base_dir: /opt/livecloud
+base_dir: /opt/ceph-deploy
 nodes: 
   - name: centos151 
     ip: 172.16.39.151
@@ -11,6 +11,10 @@ nodes:
     passwd: yunshan3302
   - name: centos153
     ip: 172.16.39.153
+    user: root
+    passwd: yunshan3302  
+  - name: centos154
+    ip: 172.16.39.154
     user: root
     passwd: yunshan3302  
 ...

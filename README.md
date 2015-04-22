@@ -2,13 +2,12 @@ vim master.yml
 vim ceph.yml
 
 python setup.py
-salt-ssh '*' -r 'echo "172.16.39.11 centos39_11" >> /etc/hosts'
+salt-ssh '*' -r 'echo "172.16.39.150 centos150" >> /etc/hosts'
 salt-ssh '*' state.sls ceph.minion
 
 salt-key -L
 salt-key -A -y
 salt '*' state.highstate
-salt '*' state.sls ceph.minion
 salt '*' state.sls ceph.ntp
 salt '*' state.sls ceph.ceph
 salt '*' state.sls ceph.kvm

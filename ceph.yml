@@ -66,5 +66,20 @@ nodes:
       vdc: 
         journal: vdb1
       vdd: 
-        journal: vdb2     
+        journal: vdb2  
+  centos154: 
+    roles: 
+    - ceph-osd
+    - ceph-mon
+
+    journal: 
+      vdb:
+        partition: 
+          per_size: 8G
+          count: 2
+    devs: 
+      vdc: 
+        journal: vdb1
+      vdd: 
+        journal: vdb2    
 ...

@@ -16,7 +16,7 @@ libvirt_pkg:
   pkg.latest: 
     - name: libvirt 
     - pkgs: [libvirt, libvirt-daemon-kvm, virt-install, virt-manager, virt-top,
-             virt-who, virt-viewer, libvirt-python]
+             virt-who, virt-viewer, libvirt-python, virsh-tools]
     - fromrepo: ceph
     - allow_updates: True
     - refresh: True

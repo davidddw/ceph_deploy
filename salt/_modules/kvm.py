@@ -111,9 +111,12 @@ def create_storage_pool(name, host_ips):
 
     conn = __get_conn()
     try:
-        p = conn.storagePoolDefineXML(xml, 0)
-        p.setAutostart(True)
-        p.create(0)
+        p = None
+        storage_pools = conn.listStoragePools()
+        if name not in storage_pools:
+            p = conn.storagePoolDefineXML(xml, 0)
+            p.setAutostart(True)
+            p.create(0)
     except libvirt.libvirtError, e:
         logger.error(e)
         raise StorageError(e.get_error_message())
