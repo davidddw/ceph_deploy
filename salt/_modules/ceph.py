@@ -1,7 +1,11 @@
 #!/usr/bin/env python
+# -*- coding:utf-8 -*-
+#
+# @author: david_dong
 
 import os
 import re
+import math
 import logging
 import shlex
 import subprocess
@@ -213,54 +217,75 @@ def _gen_ceph_conf(**context):
     params: fsid, public_network, cluster_network host_ips
     '''
     cephconf_template = '''[global]
-    fsid = {{ fsid }}
-    pid file = /var/run/ceph/$name.pid
-    log file = /var/log/ceph/$name.log
-    cephx cluster require signatures = true
-    cephx service require signatures = false
-    public network = {{ public_network }}
-    cluster network = {{ cluster_network }}
-    auth cluster required = none
-    auth service required = none
-    auth client required = none
+fsid = {{ fsid }}
+pid file = /var/run/ceph/$name.pid
+log file = /var/log/ceph/$name.log
+cephx cluster require signatures = true
+cephx service require signatures = false
+public network = {{ public_network }}
+cluster network = {{ cluster_network }}
+auth cluster required = none
+auth service required = none
+auth client required = none
+max open files = 13107
+mon osd down out interval = 600
 
 [mon]
-    mon initial members = {{ hosts| join(", ")  }}
-    mon host = {{ ips|join(",") }}
-    filestore xattr use omap = true
-    mon data = /var/lib/ceph/mon/$name
-    mon clock drift allowed = .8
+mon initial members = {{ hosts| join(", ")  }}
+mon host = {{ ips|join(",") }}
+filestore xattr use omap = true
+mon data = /var/lib/ceph/mon/$name
+mon clock drift allowed = .8
+mon pg warn max per osd = 512
 
 [osd]
-    osd journal size = 512
-    osd pool default size = 3
-    osd pool default min size = 1
-    osd pool default pg num = 128
-    osd pool default pgp num = 128
-    osd crush chooseleaf type = 1
-    osd crush update on start = true
-    filestore merge threshold = 10
-    filestore split multiple = 2
-    filestore op threads = 2
-    filestore max sync interval = 5
-    filestore min sync interval = 0.01
-    filestore queue max ops = 500
-    filestore queue max bytes = 104857600
-    filestore queue committing max ops = 500
-    filestore queue committing max bytes = 104857600
-    osd op threads = 1
-    osd disk threads = 1
-    osd max backfills = 2
-    osd map cache size = 512
-    osd scrub load threshold = 0.5
-    osd data = /var/lib/ceph/osd/$cluster-$id
-    osd journal = /var/lib/ceph/osd/$cluster-$id/journal
+osd journal size = 20000
+osd mkfs type = xfs
+osd mkfs options xfs = -f
+osd mount options xfs = "rw,noexec,nodev,noatime,inode64,nodiratime,nobarrier"
+osd pool default size = 3
+osd pool default min size = 1
+osd pool default pgnum = {{ total_pgs }}
+osd pool default pgpnum = {{ total_pgs }}
+osd crush chooseleaf type = 1
+osd crush update on start = true
+osd op threads = 8
+osd client op priority = 63
+osd recovery op priority = 4
+osd recovery max active = 10
+osd disk threads = 4
+osd max backfills = 4
+osd map cache size = 1024
+osd max write size = 512
+osd map cache bl size = 128
+osd client message size cap = 2147483648
+osd deep scrub stride = 131072
+osd data=/var/lib/ceph/osd/$cluster-$id
+osd journal=/var/lib/ceph/osd/$cluster-$id/journal
+filestore xattr use omap = true
+filestore min sync interval = 10
+filestore max sync interval = 15
+filestore queue max ops = 25000
+filestore queue max bytes = 10485760
+filestore queue committing max ops = 5000
+filestore queue committing max bytes = 10485760000
+filestore op threads=32
+journal max write bytes = 1073714824
+journal max write entries = 10000
+journal queue max ops = 50000
+journal queue max bytes = 10485760000
+
+[client]
+rbd cache = true
+rbd cache size = 268435456
+rbd cache max dirty = 134217728
+rbd cache max dirty age = 5
 
 {% for mon in host_ips -%}
 
 [mon.{{ mon['host'] }}]
-    host = {{ mon['host'] }}
-    mon addr = {{ mon['ip'] }}:6789
+host = {{ mon['host'] }}
+mon addr = {{ mon['ip'] }}:6789
 
 {% endfor -%}
 '''
@@ -295,10 +320,10 @@ def _get_mon_hostslist():
     return hosts
 
 
-def _gen_monmap(hosts_infos, fsid=None):
+def _gen_monmap(host_info_list, fsid=None):
     fsid = fsid or _get_fsid()
     host_string = ''
-    for host_info in hosts_infos:
+    for host_info in host_info_list:
         host_fmt = ' --add {host} {ip}:6789 '.format(host=host_info['host'],
                                                      ip=host_info['ip'])
         host_string += host_fmt
@@ -327,7 +352,7 @@ def _ceph_mon_start(host=None):
     return command(command_line)
 
 
-def create_mon(hosts_infos, fsid=None):
+def create_mon(host_info_list, fsid=None):
     '''
     CLI Example:
     .. code-block:: bash
@@ -337,18 +362,23 @@ def create_mon(hosts_infos, fsid=None):
     ret = {'data': {}}
     data = []
 
+    osd_num = __salt__['pillar.get']('ceph:global:total_osd')
+    total_pgs = math.pow(2, (math.ceil(math.log(
+                int(osd_num)*100/3)/math.log(2))))
+
     # gen /etc/ceph/ceph.conf
     _gen_ceph_conf(
         fsid=fsid,
         public_network=__salt__['pillar.get']('ceph:global:cluster_network'),
         cluster_network=__salt__['pillar.get']('ceph:global:public_network'),
-        host_ips=hosts_infos
+        total_pgs=int(total_pgs),
+        host_ips=host_info_list
     )
 
     # gen_mon_map
     # Test monmap if exists
     if not __salt__['file.file_exists'](CEPH_MONMAP):
-        data.append({'gen_monmap': _gen_monmap(hosts_infos, fsid)})
+        data.append({'gen_monmap': _gen_monmap(host_info_list, fsid)})
 
     # populate_mon
     mon_host = os.path.join(MON_PATH, 'mon.{host}'.format(host=_get_host()))
@@ -363,6 +393,7 @@ def create_mon(hosts_infos, fsid=None):
     )
     __salt__['file.mkdir'](ceph_host)
     __salt__['file.touch'](os.path.join(ceph_host, 'done'))
+    __salt__['file.touch'](os.path.join(ceph_host, 'sysvinit'))
 
     # start_mon
     if __salt__['file.file_exists'](os.path.join(ceph_host, 'done')):
@@ -378,9 +409,19 @@ def mon():
     '''
     CLI Example:
     .. code-block:: bash
-        salt '*' ceph.deploy_mon
+        salt '*' ceph.mon
     '''
     return create_mon(_get_mon_hostslist(), _get_fsid())
+
+
+def add_mon():
+    '''
+    CLI Example:
+    .. code-block:: bash
+        salt '*' ceph.add_mon
+    '''
+    return create_mon(_get_mon_hostslist(), _get_fsid())
+
 
 """
 create osd for each osd
@@ -495,14 +536,22 @@ def _mkfs_dev(**kwargs):
     return command_check_output(fmt_line.format(**kwargs))
 
 
+def _dev_to_uuid(dev):
+    blkid_info = __salt__['disk.blkid']()
+    device_uuid = blkid_info.get(dev, {}).get('UUID')
+    return 'UUID=%s' % (device_uuid)
+
+
 def _mount_dev(**kwargs):
     '''
-    @params: osd_mount_point, osd_dev
+    @params: osd_mount_point, osd_dev_uuid
     '''
-    __salt__['mount.mount'](kwargs['osd_mount_point'], kwargs['osd_dev'],
-                            mkmnt=True, fstype='xfs')
+    if not os.path.exists(kwargs['osd_mount_point']):
+        __salt__['file.mkdir'](kwargs['osd_mount_point'])
+    __salt__['mount.mount'](kwargs['osd_mount_point'], kwargs['osd_dev_uuid'],
+                            fstype='xfs')
     return __salt__['mount.set_fstab'](kwargs['osd_mount_point'],
-                                       kwargs['osd_dev'], 'xfs')
+                                       kwargs['osd_dev_uuid'], 'xfs')
 
 
 def _replace_journal(**kwargs):
@@ -554,21 +603,21 @@ def _ceph_autostart():
     return command('chkconfig ceph on')
 
 
-def _is_mount(dev):
+def _is_mount(dev_uuid):
     fstablists = __salt__['mount.fstab']()
     ret = False
     for _, entry in fstablists.items():
-        if entry['device'] == dev:
+        if entry['device'] == dev_uuid:
             ret = True
             break
     return ret
 
 
-def _get_id_from_dev(osd_dev):
+def _get_id_from_dev(osd_dev_uuid):
     fstablists = __salt__['mount.fstab']()
     osd_mount_point = ''
     for key, entry in fstablists.items():
-        if entry['device'] == osd_dev:
+        if entry['device'] == osd_dev_uuid:
             osd_mount_point = key
             break
 
@@ -576,7 +625,7 @@ def _get_id_from_dev(osd_dev):
     return int(ret[0]) if ret else -1
 
 
-def create_osd(dev, journal_dev, ex_journal=True):
+def create_osd(dev, journal_dev=None):
     '''
     CLI Example:
     .. code-block:: bash
@@ -591,28 +640,30 @@ def create_osd(dev, journal_dev, ex_journal=True):
 
     if not _partiton_exist(dev=dev, value='ceph'):
         data.append({'parted': _parted_dev(dev=dev)})
-    else:
-        data.append({'parted': 'exist'})
-
-    # format_disk
-    fmt_line = 'parted -s /dev/{dev} print | grep xfs'
-    if not cgrep(fmt_line.format(dev=dev)):
         data.append({'parted': _mkfs_dev(dev=dev)})
     else:
         data.append({'parted': 'exist'})
 
+    # format_disk
+    # fmt_line = 'parted -s /dev/{dev} print | grep xfs'
+    # if not cgrep(fmt_line.format(dev=dev)):
+    #    data.append({'parted': _mkfs_dev(dev=dev)})
+    # else:
+    #    data.append({'parted': 'exist'})
+
     # mount_osd
     osd_dev = '/dev/{dev}1'.format(dev=dev)
-    if not _is_mount('/dev/{dev}1'.format(dev=dev)):
+    osd_dev_uuid = _dev_to_uuid(osd_dev)
+    if not _is_mount(osd_dev_uuid):
         fmt_line = 'ceph osd create'
         osd_id = command_check_output(fmt_line).strip()
         data.append({'osd_id': osd_id})
         data.append({'mounted': _mount_dev(
-            osd_dev=osd_dev,
+            osd_dev_uuid=osd_dev_uuid,
             osd_mount_point=__get_osd_mount_point(osd_id))
         })
     else:
-        osd_id = _get_id_from_dev(osd_dev)
+        osd_id = _get_id_from_dev(osd_dev_uuid)
         data.append({'osd_id': osd_id})
         data.append({'mounted': 'already'})
 
@@ -626,7 +677,7 @@ def create_osd(dev, journal_dev, ex_journal=True):
 
     # change_journal
     journal_path = os.path.join(osd_mount_point, 'journal')
-    if ex_journal and not __salt__['file.is_link'](journal_path):
+    if journal_dev and not __salt__['file.is_link'](journal_path):
         _replace_journal(osd_node=osd_mount_point,
                          osd_id=osd_id,
                          journal_dev=journal_dev,
@@ -636,7 +687,8 @@ def create_osd(dev, journal_dev, ex_journal=True):
         # ceph_osd_crush
         _osd_crush_map(osd_id, _get_host())
 
-    _update_ini(osd_id, _get_host())
+    # _update_ini(osd_id, _get_host())
+    __salt__['file.touch'](os.path.join(osd_mount_point, 'sysvinit'))
 
     data.append({'service': _ceph_osd_start(osd_id)})
     data.append({'autostart': _ceph_autostart()})
@@ -662,6 +714,56 @@ def osd():
     return ret
 
 
+def generate_udev_rules(disk, attr1, attr2):
+    rules_fmt = '{subsystem}, {action}, {kernel}, {attr1}, {attr2}\n'
+    return rules_fmt.format(
+                subsystem='SUBSYSTEM=="block"',
+                action='ACTION=="add|change"',
+                kernel='KERNEL=="' + disk + '"',
+                attr1='ATTR{queue/rotational}="' + str(attr1) + '"',
+                attr2='ATTR{queue/scheduler}="' + attr2 + '"',)
+
+
+def udev_rules():
+    '''
+    CLI Example:
+    .. code-block:: bash
+        salt '*' ceph.udev_rules
+    '''
+    ret = []
+    ssd_list = __salt__['pillar.get']('nodes:' + _get_host() + ':ssd_list')
+    hdd_list = list()
+    devs = __salt__['pillar.get']('nodes:' + _get_host() + ':devs')
+    for dev in devs:
+        if dev not in ssd_list:
+            hdd_list.append(dev)
+
+    rules = ""
+    for hdd in hdd_list:
+        rules += generate_udev_rules(hdd, 1, 'deadline')
+    for ssd in ssd_list:
+        rules += generate_udev_rules(ssd, 0, 'noop')
+
+    __salt__['file.touch']('/etc/udev/rules.d/99-ssd.rules')
+    __salt__['file.append']('/etc/udev/rules.d/99-ssd.rules', rules)
+    ret['comment'] = 'udevadm control --reload-rules'
+    command_check_output('udevadm control --reload-rules')
+    command_check_output('udevadm trigger')
+    ret['result'] = True
+    return ret
+
+
+def uuid():
+    '''
+    CLI Example:
+    .. code-block:: bash
+        salt '*' ceph.uuid
+    '''
+    ret = []
+    ret.append(_dev_to_uuid('/dev/sdb1'))
+    return ret
+
+
 def pool():
     '''
     CLI Example:
@@ -672,8 +774,15 @@ def pool():
     data = []
     fmt_line = 'ceph osd pool create {name} {pg_num} {pgp_num}'
     pools = __salt__['pillar.get']('ceph:pools')
+    osd_num = __salt__['pillar.get']('ceph:global:total_osd')
+    total_pgs = math.pow(2, (math.ceil(math.log(
+                        int(osd_num)*100/3)/math.log(2))))
     for pool in pools:
+        pool.update({'pg_num': int(total_pgs)})
+        pool.update({'pgp_num': int(total_pgs)})
         data.append(command_check_output(fmt_line.format(**pool)))
+    no_out_cmd = 'ceph osd set noout'
+    data.append(command_check_output(no_out_cmd))
     ret['data'] = data
     ret['comment'] = 'Create ceph pool'
     ret['result'] = True

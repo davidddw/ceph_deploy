@@ -1,0 +1,4 @@
+{% for ceph in host_ips -%}
+host {{ ceph['ip'] }}
+    StrictHostKeyChecking no
+{% endfor -%}

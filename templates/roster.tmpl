@@ -1,0 +1,6 @@
+{% for ceph in host_ips -%}
+{{ ceph['name'] }}:
+  host: {{ ceph['ip'] }}
+  user: {{ ceph['user'] }}
+  passwd: {{ ceph['passwd'] }}
+{% endfor -%}

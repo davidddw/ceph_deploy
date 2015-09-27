@@ -1,4 +1,6 @@
 eclipse.preferences.version=1
+encoding//livecloud/deploy_ceph.py=utf-8
+encoding//livecloud/deploy_salt.py=utf-8
+encoding//livecloud/util.py=utf-8
 encoding//salt/_modules/ceph.py=utf-8
-encoding/caller.py=utf-8
-encoding/setup.py=utf-8
+encoding/deploy.py=utf-8
